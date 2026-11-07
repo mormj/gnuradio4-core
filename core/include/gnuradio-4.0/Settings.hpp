@@ -436,6 +436,7 @@ struct MemberDescriptor {
     using ParameterReader   = void (*)(const void* member, std::string_view key, property_map& parameters);
     using TypeNameReader    = std::string (*)();
     using LimitsCheck       = std::optional<std::string> (*)(std::string_view key, const pmt::Value& value);
+    using AnnotationReader  = property_map (*)();
 
     std::string_view name{};
 
@@ -455,6 +456,7 @@ struct MemberDescriptor {
     std::string_view documentation{};
     std::string_view unit{};
     bool             visible{false};
+    AnnotationReader annotationMetadata{nullptr};
 
     bool                              isEnum{false};
     TypeNameReader                    enumTypeName{nullptr};
@@ -603,6 +605,30 @@ void invokeReset(void* block) {
 
 namespace settings {
 
+/// Validate against effective port descriptors, including a block's OverridePortList.
+template<typename TBlock, typename TSetting>
+consteval bool validPortCountTargets() {
+    for (const auto name : TSetting::PortCountType::targets) {
+        bool found = false;
+        traits::block::all_port_descriptors<TBlock>::for_each([&]<typename P>(auto, P*) {
+            if (std::string_view(P::Name) == name && P::kIsDynamicCollection) {
+                found = true;
+            }
+        });
+        if (!found) return false;
+    }
+    return true;
+}
+
+template<typename Annotation>
+property_map annotationMetadata() {
+    property_map result;
+    Annotation::forEachMetadata([&](std::string_view key, auto&& value) {
+        result[std::pmr::string(key)] = std::forward<decltype(value)>(value);
+    });
+    return result;
+}
+
 template<typename TEnum>
 inline constexpr auto kEnumValueNames = [] {
     constexpr auto                              values = gr::meta::enumValues<TEnum>();
@@ -616,8 +642,9 @@ inline constexpr auto kEnumValueNames = [] {
 template<typename TBlock>
 inline constexpr auto kMemberDescriptors = [] {
     std::array<MemberDescriptor, refl::data_member_count<TBlock>> table{};
+    std::array<std::span<const std::string_view>, refl::data_member_count<TBlock>> countTargets{};
     if constexpr (refl::reflectable<TBlock>) {
-        refl::for_each_data_member_index<TBlock>([&table](auto kIdx) {
+        refl::for_each_data_member_index<TBlock>([&table, &countTargets](auto kIdx) {
             using MemberType = refl::data_member_type<TBlock, kIdx>;
             using RawType    = std::remove_cvref_t<MemberType>;
             using Type       = unwrap_if_wrapped_t<RawType>;
@@ -645,6 +672,12 @@ inline constexpr auto kMemberDescriptors = [] {
                 entry.documentation = RawType::documentation();
                 entry.unit          = RawType::unit();
                 entry.visible       = RawType::visible();
+                countTargets[kIdx] = std::span<const std::string_view>(RawType::PortCountType::targets);
+                if constexpr (!RawType::PortCountType::targets.empty()) {
+                    static_assert(std::integral<Type> && !std::same_as<Type, bool>, "PortCountFor requires an integer setting");
+                    static_assert(validPortCountTargets<TBlock, RawType>(), "PortCountFor target must name a reflected dynamic port collection");
+                }
+                entry.annotationMetadata = &annotationMetadata<RawType>;
             }
             if constexpr (std::is_enum_v<Type>) {
                 entry.isEnum         = true;
@@ -652,6 +685,17 @@ inline constexpr auto kMemberDescriptors = [] {
                 entry.enumValueNames = std::span<const std::string_view>(kEnumValueNames<Type>);
             }
         });
+    }
+    for (std::size_t i = 0; i < table.size(); ++i) {
+        for (const auto target : countTargets[i]) {
+            std::size_t owners = 0;
+            for (const auto& memberTargets : countTargets) {
+                for (const auto other : memberTargets) {
+                    if (target == other) ++owners;
+                }
+            }
+            if (owners != 1) throw "PortCountFor target has competing count owners";
+        }
     }
     return table;
 }();

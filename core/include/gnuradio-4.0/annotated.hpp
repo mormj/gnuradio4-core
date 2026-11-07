@@ -8,7 +8,9 @@
 #include <limits>
 #include <memory_resource>
 #include <sstream>
+#include <string>
 #include <string_view>
+#include <vector>
 #include <type_traits>
 #include <utility>
 
@@ -66,6 +68,24 @@ static_assert(!Documentation<EmptyUnit>);
  * @brief Annotates field etc. that the entity is visible from a UI perspective.
  */
 struct Visible {};
+
+/// The annotated integer setting determines the size of each named dynamic port collection.
+/// This declares a relationship; the block still performs initialization and resizing.
+template<gr::meta::fixed_string... Names>
+struct PortCountFor {
+    static constexpr std::array<std::string_view, sizeof...(Names)> targets{std::string_view(Names)...};
+    static void exportMetadata(auto&& emit) {
+        if constexpr (sizeof...(Names) > 0) {
+            emit("port_count_for", std::vector<std::string>{std::string(std::string_view(Names))...});
+        }
+    }
+};
+
+template<typename T>
+struct is_port_count_for : std::false_type {};
+
+template<gr::meta::fixed_string... Names>
+struct is_port_count_for<PortCountFor<Names...>> : std::true_type {};
 
 /**
  * @brief Disable the default tag forwarder.
@@ -384,6 +404,13 @@ struct Limits {
     static constexpr ValueType           MaxRange      = UpperLimit;
     static constexpr decltype(Validator) ValidatorFunc = Validator;
 
+    static void exportMetadata(auto&& emit) {
+        if constexpr (std::is_arithmetic_v<ValueType> && LowerLimit != UpperLimit) {
+            emit("minimum", LowerLimit);
+            emit("maximum", UpperLimit);
+        }
+    }
+
     static constexpr bool validate(const ValueType& value) noexcept {
         if constexpr (LowerLimit == UpperLimit) { // ignore range checks
             if constexpr (Validator != nullptr) {
@@ -452,6 +479,8 @@ template<typename T, gr::meta::fixed_string description_ = "", typename... Argum
 struct Annotated {
     using value_type = T;
     using LimitType  = typename gr::meta::typelist<Arguments...>::template find_or_default<is_limits, EmptyLimit>;
+    using PortCountType = typename gr::meta::typelist<Arguments...>::template find_or_default<is_port_count_for, PortCountFor<>>;
+    static_assert(gr::meta::typelist<Arguments...>::template filter<is_port_count_for>::size <= 1, "declare PortCountFor once per setting");
     T value;
 
     Annotated() = default;
@@ -504,6 +533,18 @@ struct Annotated {
     requires(std::is_same_v<T, std::string> || std::is_same_v<T, std::pmr::string>)
     {
         return std::string_view(value);
+    }
+
+    // Attribute exporters contribute typed values without depending on the metadata transport.
+    static void forEachMetadata(auto&& emit) {
+        ([&] {
+            if constexpr (is_limits<Arguments>::value && !std::same_as<Arguments, LimitType>) {
+                // Validation uses the first Limits annotation; metadata must describe that same limit.
+                return;
+            } else if constexpr (requires { Arguments::exportMetadata(emit); }) {
+                Arguments::exportMetadata(emit);
+            }
+        }(), ...);
     }
 
     // meta-information

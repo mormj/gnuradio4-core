@@ -45,6 +45,15 @@ struct Annotations : Block<Annotations> {
     [[nodiscard]] constexpr float processOne(float x) const noexcept { return gain * x; }
 };
 
+struct CountRelations : Block<CountRelations> {
+    std::vector<PortIn<float>> inputs;
+    std::vector<PortOut<double>> outputs;
+    Annotated<gr::Size_t, "count", Limits<0U, 32U>, PortCountFor<"inputs", "outputs">> channels = 0;
+    Annotated<int, "unbounded", Limits<7, 7>> unbounded = 0;
+    GR_MAKE_REFLECTABLE(CountRelations, inputs, outputs, channels, unbounded);
+    gr::work::Status processBulk(auto&&...) { return gr::work::Status::OK; }
+};
+
 [[nodiscard]] const gr::settings::MemberDescriptor* memberNamed(std::string_view name) {
     const auto members = gr::settings::blockDescriptor<Annotations>().hooks.members;
     const auto it      = std::ranges::find(members, name, &gr::settings::MemberDescriptor::name);
@@ -190,6 +199,21 @@ const boost::ut::suite<"settings table"> _settingsTable = [] {
         expect(that % !outside.appliedParameters.contains("gain"));
         expect(that % !outside.forwardParameters.contains("gain")) << "a refused value must not reach downstream blocks";
         expect(eq(block.gain.value, 3.0f)) << "a refused value must leave the member alone";
+    };
+
+    "count relationships retain exact targets and declared bounds"_test = [] {
+        CountRelations block;
+        block.settings().init();
+        const auto& meta = block.meta_information.value;
+        const auto targets = meta.at("channels::port_count_for").get_if<gr::Tensor<gr::pmt::Value>>();
+        expect(fatal(targets != nullptr));
+        expect(eq(targets->size(), 2UZ));
+        expect(eq(std::string((*targets)[0].value_or(std::string_view{})), std::string("inputs")));
+        expect(eq(std::string((*targets)[1].value_or(std::string_view{})), std::string("outputs")));
+        expect(eq(meta.at("channels::minimum").value_or(99U), 0U));
+        expect(eq(meta.at("channels::maximum").value_or(99U), 32U));
+        expect(!meta.contains("unbounded::minimum") && !meta.contains("unbounded::maximum"));
+        expect(block.inputs.empty() && block.outputs.empty());
     };
 
     "an enum setting round-trips through its name"_test = [] {

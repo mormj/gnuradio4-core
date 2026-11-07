@@ -53,7 +53,8 @@
 // scheduler reads the `msgIn` and `msgOut` ports of a plugin's block through typed pointers, and the layout of a port
 // crosses the boundary too. `SchedulerModel::start()` returns the refusal of a start as a `std::expected`, and a host
 // reads it from a plugin's scheduler.
-#define GR_PLUGIN_CURRENT_ABI_VERSION 10
+// Version 11 adds the settings member annotation metadata accessor. Rebuild block plugins.
+#define GR_PLUGIN_CURRENT_ABI_VERSION 11
 
 namespace gr {
 

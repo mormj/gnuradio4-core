@@ -113,6 +113,22 @@ endif()
 # whether the static_assert reads it. The targets are excluded from the default build, and the nested build they drive
 # shares one binary directory, so they may not run concurrently.
 set(_COMPILE_FAIL_DEDUCED_OVERRIDE_TESTS cf_KeepsTagOffsets_forwardtags_deduced cf_Resampling_forwardtags_deduced)
+foreach(MODE TYPE TARGET FIXED OWNER)
+  set(TEST_NAME cf_PortCountFor_${MODE})
+  add_executable(${TEST_NAME} EXCLUDE_FROM_ALL compile_fail/cf_PortCountFor.cpp)
+  target_compile_definitions(${TEST_NAME} PRIVATE BAD_${MODE})
+  target_link_libraries(${TEST_NAME} PRIVATE gnuradio-options gnuradio-core)
+  add_test(NAME ${TEST_NAME} COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target ${TEST_NAME})
+  if(MODE STREQUAL "TYPE")
+    set(_count_diagnostic "PortCountFor requires an integer setting")
+  elseif(MODE STREQUAL "OWNER")
+    set(_count_diagnostic "PortCountFor target has competing count owners")
+  else()
+    set(_count_diagnostic "PortCountFor target must name a reflected dynamic port collection")
+  endif()
+  set_tests_properties(${TEST_NAME} PROPERTIES PASS_REGULAR_EXPRESSION "${_count_diagnostic}"
+    RESOURCE_LOCK gr_core_build_tree TIMEOUT 300)
+endforeach()
 set(_COMPILE_FAIL_DROPPED_TWICE_TESTS cf_DroppedTagKeys_twice)
 set(_COMPILE_FAIL_DROPPED_SPELLING_TESTS cf_DroppedTagKeys_leading_colon)
 foreach(TEST_NAME IN LISTS _COMPILE_FAIL_DEDUCED_OVERRIDE_TESTS _COMPILE_FAIL_DROPPED_TWICE_TESTS

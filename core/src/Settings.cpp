@@ -622,6 +622,11 @@ void CtxSettingsBase::init() {
                 metaInformation[convert_string_domain(memberName) + "::documentation"] = std::string(member.documentation);
                 metaInformation[convert_string_domain(memberName) + "::unit"]          = std::string(member.unit);
                 metaInformation[convert_string_domain(memberName) + "::visible"]       = member.visible;
+                if (member.annotationMetadata != nullptr) {
+                    for (auto& [key, value] : member.annotationMetadata()) {
+                        metaInformation[convert_string_domain(memberName) + "::" + key] = std::move(value);
+                    }
+                }
             }
         }
     }
