@@ -35,7 +35,7 @@ struct Annotations : Block<Annotations> {
     PortIn<float>  in;
     PortOut<float> out;
 
-    Annotated<float, "gain", Visible, Doc<"linear voltage gain">, Unit<"dB">, Limits<0.f, 10.f>> gain     = 1.0f;
+    Annotated<float, "gain", Visible, Doc<"linear voltage gain">, Unit<"dB">, Limits<0.f, 10.f>, UpdatePolicy<SettingUpdatePolicy::Live>> gain     = 1.0f;
     Annotated<Waveform, "waveform", Doc<"generated shape">>                                      waveform = Waveform::sine;
     Annotated<std::string, "label">                                                              label    = "unnamed";
     gr::Size_t                                                                                   count    = 0U;
@@ -49,7 +49,7 @@ struct CountRelations : Block<CountRelations> {
     std::vector<PortIn<float>> inputs;
     std::vector<PortOut<double>> outputs;
     Annotated<gr::Size_t, "count", Limits<0U, 32U>, PortCountFor<"inputs", "outputs">> channels = 0;
-    Annotated<int, "unbounded", Limits<7, 7>> unbounded = 0;
+    Annotated<int, "unbounded", Limits<7, 7>, UpdatePolicy<SettingUpdatePolicy::Stopped>> unbounded = 0;
     GR_MAKE_REFLECTABLE(CountRelations, inputs, outputs, channels, unbounded);
     gr::work::Status processBulk(auto&&...) { return gr::work::Status::OK; }
 };
@@ -214,6 +214,10 @@ const boost::ut::suite<"settings table"> _settingsTable = [] {
         expect(eq(meta.at("channels::maximum").value_or(99U), 32U));
         expect(!meta.contains("unbounded::minimum") && !meta.contains("unbounded::maximum"));
         expect(block.inputs.empty() && block.outputs.empty());
+        expect(eq(meta.at("channels::update_policy").value_or(std::string_view{}), std::string_view("topology")));
+        expect(eq(meta.at("unbounded::update_policy").value_or(std::string_view{}), std::string_view("stopped")));
+        const auto annotated = makeBlock();
+        expect(eq(metaString(annotated, "gain::update_policy"), std::string("live")));
     };
 
     "an enum setting round-trips through its name"_test = [] {

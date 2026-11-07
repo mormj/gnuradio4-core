@@ -69,6 +69,25 @@ static_assert(!Documentation<EmptyUnit>);
  */
 struct Visible {};
 
+enum class SettingUpdatePolicy { Unspecified, Live, Stopped, Topology };
+
+/// Declares the supported application context; it does not grant permission or replace validation.
+template<SettingUpdatePolicy Policy>
+struct UpdatePolicy {
+    static constexpr auto value = Policy;
+    static void exportMetadata(auto&& emit) {
+        if constexpr (Policy != SettingUpdatePolicy::Unspecified) {
+            emit("update_policy", std::string(Policy == SettingUpdatePolicy::Live ? "live" : Policy == SettingUpdatePolicy::Stopped ? "stopped" : "topology"));
+        }
+    }
+};
+
+template<typename T>
+struct is_update_policy : std::false_type {};
+
+template<SettingUpdatePolicy Policy>
+struct is_update_policy<UpdatePolicy<Policy>> : std::true_type {};
+
 /// The annotated integer setting determines the size of each named dynamic port collection.
 /// This declares a relationship; the block still performs initialization and resizing.
 template<gr::meta::fixed_string... Names>
@@ -480,7 +499,10 @@ struct Annotated {
     using value_type = T;
     using LimitType  = typename gr::meta::typelist<Arguments...>::template find_or_default<is_limits, EmptyLimit>;
     using PortCountType = typename gr::meta::typelist<Arguments...>::template find_or_default<is_port_count_for, PortCountFor<>>;
+    using UpdatePolicyType = typename gr::meta::typelist<Arguments...>::template find_or_default<is_update_policy, UpdatePolicy<SettingUpdatePolicy::Unspecified>>;
     static_assert(gr::meta::typelist<Arguments...>::template filter<is_port_count_for>::size <= 1, "declare PortCountFor once per setting");
+    static_assert(gr::meta::typelist<Arguments...>::template filter<is_update_policy>::size <= 1, "declare UpdatePolicy once per setting");
+    static_assert(PortCountType::targets.empty() || UpdatePolicyType::value != SettingUpdatePolicy::Live, "a port count changes topology and cannot declare a live update policy");
     T value;
 
     Annotated() = default;
@@ -545,6 +567,9 @@ struct Annotated {
                 Arguments::exportMetadata(emit);
             }
         }(), ...);
+        if constexpr (!PortCountType::targets.empty()) {
+            emit("update_policy", std::string(UpdatePolicyType::value == SettingUpdatePolicy::Stopped ? "stopped" : "topology"));
+        }
     }
 
     // meta-information

@@ -3,7 +3,9 @@
 struct InvalidCount : gr::Block<InvalidCount> {
     std::vector<gr::PortIn<float>> inputs;
     std::array<gr::PortOut<float>, 2> fixed;
-#if defined(BAD_TYPE)
+#if defined(BAD_POLICY)
+    gr::Annotated<int, "count", gr::PortCountFor<"inputs">, gr::UpdatePolicy<gr::SettingUpdatePolicy::Live>> count = 1;
+#elif defined(BAD_TYPE)
     gr::Annotated<float, "count", gr::PortCountFor<"inputs">> count = 1;
 #elif defined(BAD_FIXED)
     gr::Annotated<int, "count", gr::PortCountFor<"fixed">> count = 1;
