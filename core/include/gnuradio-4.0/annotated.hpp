@@ -67,6 +67,12 @@ static_assert(!Documentation<EmptyUnit>);
  */
 struct Visible {};
 
+/// A block's static capability declarations. Each attribute exports a namespaced key and a typed value.
+template<typename... Attributes>
+struct BlockMetadata {
+    static void exportMetadata(auto&& emit) { (Attributes::exportMetadata(emit), ...); }
+};
+
 /**
  * @brief Disable the default tag forwarder.
  *

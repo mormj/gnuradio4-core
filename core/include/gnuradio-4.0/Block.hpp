@@ -881,6 +881,16 @@ public:
 
             ret.insert_or_assign("Drawable", info);
         }
+        if constexpr (requires { typename Derived::BlockMetadata; }) {
+            property_map capabilities;
+            Derived::BlockMetadata::exportMetadata([&](std::string_view key, auto&& value) {
+                if (key.empty() || key.find(':') == std::string_view::npos ||
+                    !capabilities.try_emplace(std::pmr::string(key), std::forward<decltype(value)>(value)).second) {
+                    throw std::invalid_argument("block capability keys must be namespaced and unique");
+                }
+            });
+            ret["gr:capabilities"] = std::move(capabilities);
+        }
         return ret;
     }
 

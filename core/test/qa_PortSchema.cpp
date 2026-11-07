@@ -2,7 +2,22 @@
 #include <gnuradio-4.0/BlockModel.hpp>
 
 namespace {
+struct ExampleCapability {
+    static void exportMetadata(auto&& emit) {
+        emit("example:visualization", gr::property_map{{"version", std::uint32_t(1)}, {"payload", "example-v1"}});
+    }
+};
+
+struct DuplicateCapabilities : gr::Block<DuplicateCapabilities> {
+    using BlockMetadata = gr::BlockMetadata<ExampleCapability, ExampleCapability>;
+    gr::PortIn<float> in;
+    gr::PortOut<float> out;
+    GR_MAKE_REFLECTABLE(DuplicateCapabilities, in, out);
+    float processOne(float value) const noexcept { return value; }
+};
+
 struct SchemaBlock : gr::Block<SchemaBlock> {
+    using BlockMetadata = gr::BlockMetadata<ExampleCapability>;
     std::vector<gr::PortIn<double, gr::Async, gr::Optional>> empty;
     std::array<gr::PortIn<float>, 2> fixed;
     std::array<gr::PortOut<float>, 0> zero;
@@ -34,6 +49,9 @@ const boost::ut::suite schemaTests = [] {
     };
     "schema describes declarations without materializing ports"_test = [] {
         gr::BlockWrapper<SchemaBlock> block;
+        const auto& capability = mapAt(mapAt(block.metaInformation(), "gr:capabilities"), "example:visualization");
+        expect(eq(capability.at("payload").value_or(std::string_view{}), std::string_view("example-v1")));
+        expect(throws<std::invalid_argument>([] { DuplicateCapabilities duplicate; }));
         const auto& schema = mapAt(block.metaInformation(), "gr:port_schema");
         expect(eq(schema.at("version").value_or(0U), 1U));
         const auto& inputs = mapAt(schema, "inputs");
