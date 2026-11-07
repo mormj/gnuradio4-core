@@ -854,6 +854,26 @@ public:
     static property_map initMetaInfo() {
         using namespace std::string_literals;
         property_map ret;
+        // Describe declarations, not instantiated ports: an empty collection still has a type and shape.
+        // Non-normal blocks export their externally managed ports through their own metadata contract.
+        if constexpr (Derived::blockCategory == block::Category::NormalBlock) {
+            property_map inputs;
+            property_map outputs;
+            bool uniqueNames = true;
+            traits::block::all_port_descriptors<Derived>::for_each([&]<typename P>(auto, P*) {
+                property_map port{{"type", meta::type_name<typename P::inner_value_type>()},
+                    {"collection_kind", std::string(P::kIsStaticCollection ? "fixed" : P::kIsDynamicCollection ? "dynamic" : "single")},
+                    {"port_kind", std::string(P::kPortType == PortType::STREAM ? "stream" : "message")},
+                    {"is_optional", P::kIsOptional}, {"is_synchronous", P::kIsSynch}};
+                if constexpr (P::kIsStaticCollection) {
+                    port["fixed_extent"] = std::uint64_t(std::tuple_size_v<typename P::value_type>);
+                }
+                if (!(P::kIsInput ? inputs : outputs).try_emplace(std::pmr::string(std::string_view(P::Name)), std::move(port)).second) {
+                    uniqueNames = false;
+                }
+            });
+            if (uniqueNames) ret["gr:port_schema"] = property_map{{"version", std::uint32_t(1)}, {"inputs", std::move(inputs)}, {"outputs", std::move(outputs)}};
+        }
         if constexpr (!std::is_same_v<NotDrawable, DrawableControl>) {
             property_map info;
             info.insert_or_assign("Category", std::string(gr::meta::enumName(DrawableControl::kCategory).value_or("")));
