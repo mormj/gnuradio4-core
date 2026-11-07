@@ -55,7 +55,8 @@
 // reads it from a plugin's scheduler. BlockModel::requestFinish() adds a virtual
 // entry and Block stores its cooperative finish flag. The scheduler drain virtual
 // interface differs from the previous draft; matching plugins must be rebuilt.
-#define GR_PLUGIN_CURRENT_ABI_VERSION 13
+// Composition appends two scheduler virtual entries beyond cooperative finish.
+#define GR_PLUGIN_CURRENT_ABI_VERSION 14
 
 namespace gr {
 
