@@ -49,8 +49,9 @@ struct CountRelations : Block<CountRelations> {
     std::vector<PortIn<float>> inputs;
     std::vector<PortOut<double>> outputs;
     Annotated<gr::Size_t, "count", Limits<0U, 32U>, PortCountFor<"inputs", "outputs">> channels = 0;
-    Annotated<int, "unbounded", Limits<7, 7>, UpdatePolicy<SettingUpdatePolicy::Stopped>> unbounded = 0;
-    GR_MAKE_REFLECTABLE(CountRelations, inputs, outputs, channels, unbounded);
+    Annotated<int, "unbounded", Limits<7, 7>, UpdatePolicy<SettingUpdatePolicy::Stopped>, EnabledWhen<"active", false>> unbounded = 0;
+    bool active = true;
+    GR_MAKE_REFLECTABLE(CountRelations, inputs, outputs, channels, unbounded, active);
     gr::work::Status processBulk(auto&&...) { return gr::work::Status::OK; }
 };
 
@@ -214,6 +215,8 @@ const boost::ut::suite<"settings table"> _settingsTable = [] {
         expect(eq(meta.at("channels::maximum").value_or(99U), 32U));
         expect(!meta.contains("unbounded::minimum") && !meta.contains("unbounded::maximum"));
         expect(block.inputs.empty() && block.outputs.empty());
+        expect(eq(meta.at("unbounded::enabled_when_parameter").value_or(std::string_view{}), std::string_view("active")));
+        expect(!meta.at("unbounded::enabled_when_value").value_or(true));
         expect(eq(meta.at("channels::update_policy").value_or(std::string_view{}), std::string_view("topology")));
         expect(eq(meta.at("unbounded::update_policy").value_or(std::string_view{}), std::string_view("stopped")));
         const auto annotated = makeBlock();

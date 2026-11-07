@@ -1,6 +1,7 @@
 #ifndef GNURADIO_SETTINGS_HPP
 #define GNURADIO_SETTINGS_HPP
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <concepts>
@@ -629,6 +630,16 @@ property_map annotationMetadata() {
     return result;
 }
 
+template<typename TBlock, typename Annotation>
+consteval bool validEnabledWhenSource() {
+    bool found = false;
+    refl::for_each_data_member_index<TBlock>([&](auto idx) {
+        using Type = unwrap_if_wrapped_t<std::remove_cvref_t<refl::data_member_type<TBlock, idx>>>;
+        if (refl::data_member_name<TBlock, idx>.view() == Annotation::EnabledWhenType::source && std::same_as<Type, bool>) found = true;
+    });
+    return found;
+}
+
 template<typename TEnum>
 inline constexpr auto kEnumValueNames = [] {
     constexpr auto                              values = gr::meta::enumValues<TEnum>();
@@ -643,8 +654,9 @@ template<typename TBlock>
 inline constexpr auto kMemberDescriptors = [] {
     std::array<MemberDescriptor, refl::data_member_count<TBlock>> table{};
     std::array<std::span<const std::string_view>, refl::data_member_count<TBlock>> countTargets{};
+    std::array<std::string_view, refl::data_member_count<TBlock>> enabledSources{};
     if constexpr (refl::reflectable<TBlock>) {
-        refl::for_each_data_member_index<TBlock>([&table, &countTargets](auto kIdx) {
+        refl::for_each_data_member_index<TBlock>([&table, &countTargets, &enabledSources](auto kIdx) {
             using MemberType = refl::data_member_type<TBlock, kIdx>;
             using RawType    = std::remove_cvref_t<MemberType>;
             using Type       = unwrap_if_wrapped_t<RawType>;
@@ -678,6 +690,10 @@ inline constexpr auto kMemberDescriptors = [] {
                     static_assert(validPortCountTargets<TBlock, RawType>(), "PortCountFor target must name a reflected dynamic port collection");
                 }
                 entry.annotationMetadata = &annotationMetadata<RawType>;
+                enabledSources[kIdx] = RawType::EnabledWhenType::source;
+                if constexpr (!RawType::EnabledWhenType::source.empty()) {
+                    static_assert(validEnabledWhenSource<TBlock, RawType>(), "EnabledWhen source must name a reflected boolean setting");
+                }
             }
             if constexpr (std::is_enum_v<Type>) {
                 entry.isEnum         = true;
@@ -687,6 +703,13 @@ inline constexpr auto kMemberDescriptors = [] {
         });
     }
     for (std::size_t i = 0; i < table.size(); ++i) {
+        std::size_t node = i;
+        for (std::size_t depth = 0; depth < table.size() && !enabledSources[node].empty(); ++depth) {
+            const auto next = std::ranges::find(table, enabledSources[node], &MemberDescriptor::name);
+            if (next == table.end()) break;
+            node = static_cast<std::size_t>(next - table.begin());
+            if (node == i) throw "EnabledWhen conditions must not form a cycle";
+        }
         for (const auto target : countTargets[i]) {
             std::size_t owners = 0;
             for (const auto& memberTargets : countTargets) {

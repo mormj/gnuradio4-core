@@ -69,6 +69,27 @@ static_assert(!Documentation<EmptyUnit>);
  */
 struct Visible {};
 
+struct NoEnabledWhen {
+    static constexpr std::string_view source{};
+};
+
+/// A presentation condition evaluated against the current value of a reflected boolean setting.
+template<gr::meta::fixed_string Parameter, bool Expected>
+struct EnabledWhen {
+    static_assert(!Parameter.empty(), "EnabledWhen requires a source setting");
+    static constexpr std::string_view source{Parameter};
+    static void exportMetadata(auto&& emit) {
+        emit("enabled_when_parameter", std::string(source));
+        emit("enabled_when_value", Expected);
+    }
+};
+
+template<typename T>
+struct is_enabled_when : std::false_type {};
+
+template<gr::meta::fixed_string Parameter, bool Expected>
+struct is_enabled_when<EnabledWhen<Parameter, Expected>> : std::true_type {};
+
 enum class SettingUpdatePolicy { Unspecified, Live, Stopped, Topology };
 
 /// Declares the supported application context; it does not grant permission or replace validation.
@@ -499,8 +520,10 @@ struct Annotated {
     using value_type = T;
     using LimitType  = typename gr::meta::typelist<Arguments...>::template find_or_default<is_limits, EmptyLimit>;
     using PortCountType = typename gr::meta::typelist<Arguments...>::template find_or_default<is_port_count_for, PortCountFor<>>;
+    using EnabledWhenType = typename gr::meta::typelist<Arguments...>::template find_or_default<is_enabled_when, NoEnabledWhen>;
     using UpdatePolicyType = typename gr::meta::typelist<Arguments...>::template find_or_default<is_update_policy, UpdatePolicy<SettingUpdatePolicy::Unspecified>>;
     static_assert(gr::meta::typelist<Arguments...>::template filter<is_port_count_for>::size <= 1, "declare PortCountFor once per setting");
+    static_assert(gr::meta::typelist<Arguments...>::template filter<is_enabled_when>::size <= 1, "declare EnabledWhen once per setting");
     static_assert(gr::meta::typelist<Arguments...>::template filter<is_update_policy>::size <= 1, "declare UpdatePolicy once per setting");
     static_assert(PortCountType::targets.empty() || UpdatePolicyType::value != SettingUpdatePolicy::Live, "a port count changes topology and cannot declare a live update policy");
     T value;
