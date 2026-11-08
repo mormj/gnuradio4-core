@@ -609,13 +609,15 @@ namespace settings {
 template<typename TBlock, typename TSetting>
 consteval bool validPortCountTargets() {
     for (const auto name : TSetting::PortCountType::targets) {
-        bool found = false;
+        std::size_t matches   = 0;
+        bool        isDynamic = false;
         traits::block::all_port_descriptors<TBlock>::for_each([&]<typename P>(auto, P*) {
-            if (std::string_view(P::Name) == name && P::kIsDynamicCollection) {
-                found = true;
+            if (std::string_view(P::Name) == name) {
+                ++matches;
+                isDynamic = P::kIsDynamicCollection;
             }
         });
-        if (!found) return false;
+        if (matches != 1 || !isDynamic) return false;
     }
     return true;
 }
@@ -675,7 +677,7 @@ inline constexpr auto kMemberDescriptors = [] {
                 countTargets[kIdx] = std::span<const std::string_view>(RawType::PortCountType::targets);
                 if constexpr (!RawType::PortCountType::targets.empty()) {
                     static_assert(std::integral<Type> && !std::same_as<Type, bool>, "PortCountFor requires an integer setting");
-                    static_assert(validPortCountTargets<TBlock, RawType>(), "PortCountFor target must name a reflected dynamic port collection");
+                    static_assert(validPortCountTargets<TBlock, RawType>(), "PortCountFor target must name exactly one reflected dynamic port collection");
                 }
                 entry.annotationMetadata = &annotationMetadata<RawType>;
             }
