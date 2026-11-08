@@ -113,7 +113,7 @@ endif()
 # whether the static_assert reads it. The targets are excluded from the default build, and the nested build they drive
 # shares one binary directory, so they may not run concurrently.
 set(_COMPILE_FAIL_DEDUCED_OVERRIDE_TESTS cf_KeepsTagOffsets_forwardtags_deduced cf_Resampling_forwardtags_deduced)
-foreach(MODE TYPE TARGET FIXED OWNER)
+foreach(MODE TYPE TARGET FIXED OWNER AMBIGUOUS_DYNAMIC AMBIGUOUS_SINGLE)
   set(TEST_NAME cf_PortCountFor_${MODE})
   add_executable(${TEST_NAME} EXCLUDE_FROM_ALL compile_fail/cf_PortCountFor.cpp)
   target_compile_definitions(${TEST_NAME} PRIVATE BAD_${MODE})
@@ -124,7 +124,7 @@ foreach(MODE TYPE TARGET FIXED OWNER)
   elseif(MODE STREQUAL "OWNER")
     set(_count_diagnostic "PortCountFor target has competing count owners")
   else()
-    set(_count_diagnostic "PortCountFor target must name a reflected dynamic port collection")
+    set(_count_diagnostic "PortCountFor target must name exactly one reflected dynamic port collection")
   endif()
   set_tests_properties(${TEST_NAME} PROPERTIES PASS_REGULAR_EXPRESSION "${_count_diagnostic}"
     RESOURCE_LOCK gr_core_build_tree TIMEOUT 300)
