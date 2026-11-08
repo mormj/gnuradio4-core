@@ -9,7 +9,7 @@
 #include <string_view>
 #include <vector>
 
-#include <gnuradio-4.0/Block.hpp>
+#include <gnuradio-4.0/BlockModel.hpp>
 #include <gnuradio-4.0/Sequence.hpp>
 #include <gnuradio-4.0/Settings.hpp>
 
@@ -54,6 +54,20 @@ struct CountRelations : Block<CountRelations> {
     GR_MAKE_REFLECTABLE(CountRelations, inputs, outputs, channels, unbounded, active);
     gr::work::Status processBulk(auto&&...) { return gr::work::Status::OK; }
 };
+
+struct OverriddenCountRelations : Block<OverriddenCountRelations> {
+    std::vector<PortIn<float>> inputs;
+    std::vector<PortOut<double>> outputs;
+    static constexpr auto kFirstPort = refl::data_member_count<Block<OverriddenCountRelations>>;
+    using OverridePortList = meta::typelist<
+        PortIn<float>::make_port_descriptor<"inlets", detail::DynamicPortCollection, 0, kFirstPort>,
+        PortOut<double>::make_port_descriptor<"outlets", detail::DynamicPortCollection, 0, kFirstPort + 1>>;
+    Annotated<gr::Size_t, "count", Limits<0U, 32U>, PortCountFor<"inlets", "outlets">> channels = 0;
+    GR_MAKE_REFLECTABLE(OverriddenCountRelations, inputs, outputs, channels);
+    gr::work::Status processBulk(auto&&...) { return gr::work::Status::OK; }
+};
+static_assert(refl::data_member_name<OverriddenCountRelations, OverriddenCountRelations::kFirstPort>.view() == "inputs");
+static_assert(refl::data_member_name<OverriddenCountRelations, OverriddenCountRelations::kFirstPort + 1>.view() == "outputs");
 
 [[nodiscard]] const gr::settings::MemberDescriptor* memberNamed(std::string_view name) {
     const auto members = gr::settings::blockDescriptor<Annotations>().hooks.members;
@@ -221,6 +235,25 @@ const boost::ut::suite<"settings table"> _settingsTable = [] {
         expect(eq(meta.at("unbounded::update_policy").value_or(std::string_view{}), std::string_view("stopped")));
         const auto annotated = makeBlock();
         expect(eq(metaString(annotated, "gain::update_policy"), std::string("live")));
+    };
+
+    "count relationships accept unambiguous overridden names and empty collections"_test = [] {
+        gr::BlockWrapper<OverriddenCountRelations> block;
+        block.settings().init();
+        const auto& meta = block.metaInformation();
+        const auto targets = meta.at("channels::port_count_for").get_if<gr::Tensor<gr::pmt::Value>>();
+        expect(fatal(targets != nullptr));
+        expect(eq(targets->size(), 2UZ));
+        expect(eq((*targets)[0].value_or(std::string_view{}), std::string_view("inlets")));
+        expect(eq((*targets)[1].value_or(std::string_view{}), std::string_view("outlets")));
+        expect(eq(meta.at("channels::minimum").value_or(99U), 0U));
+        expect(eq(meta.at("channels::maximum").value_or(99U), 32U));
+        expect(eq(block.dynamicInputPortsSize(), 1UZ));
+        expect(eq(block.dynamicOutputPortsSize(), 1UZ));
+        expect(eq(block.dynamicInputPortsSize(0), 0UZ));
+        expect(eq(block.dynamicOutputPortsSize(0), 0UZ));
+        expect(eq(gr::BlockModel::portName(block.dynamicInputPorts().at(0)), std::string("inlets")));
+        expect(eq(gr::BlockModel::portName(block.dynamicOutputPorts().at(0)), std::string("outlets")));
     };
 
     "an enum setting round-trips through its name"_test = [] {

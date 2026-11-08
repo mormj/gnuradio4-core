@@ -8,11 +8,14 @@ Annotated<gr::Size_t, "channels", Visible, Limits<0U, 32U>,
           PortCountFor<"inputs", "outputs">> channels = 0;
 ```
 
-Names refer to effective reflected port descriptors, including overrides.
-Compilation refuses missing targets, fixed or single ports, non-integer count
-settings, and multiple declarations owning the same target. The block still
-initializes and resizes the collections. The annotation neither resizes ports nor
-grants permission to change a connected or running graph.
+Each name must uniquely identify an effective reflected port descriptor,
+including overrides, across both input and output directions. Same-name input
+and output descriptors cannot be referenced by the current unqualified
+`PortCountFor` syntax. Compilation refuses missing or ambiguous targets, fixed
+or single ports, non-integer count settings, and multiple declarations owning
+the same target. The block still initializes and resizes the collections. The
+annotation neither resizes ports nor grants permission to change a connected or
+running graph.
 
 Settings initialization exports `channels::port_count_for` as a string list in
 `metaInformation()`. Numeric annotated limits export `channels::minimum` and
